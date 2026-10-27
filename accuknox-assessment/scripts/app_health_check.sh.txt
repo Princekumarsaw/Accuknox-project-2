@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Application Health Checker
+
+URL="${1:-}"
+
+if [[ -z "$URL" ]]; then
+    echo "Usage: $0 <application_url>"
+    echo "Example: $0 https://example.com"
+    exit 2
+fi
+
+if [[ ! "$URL" =~ ^https?:// ]]; then
+    echo "ERROR: URL must start with http:// or https://"
+    exit 2
+fi
+
+echo "=================================="
+echo "    APPLICATION HEALTH CHECK"
+echo "=================================="
+echo "Application: $URL"
+
+HTTP_STATUS=$(curl -sS -o /dev/null \
+    -w "%{http_code}" \
+    --connect-timeout 5 \
+    --max-time 10 \
+    "$URL" 2>/dev/null)
+CURL_EXIT=$?
+
+if (( CURL_EXIT != 0 )); then
+    echo "HTTP Status: No response"
+    echo "Status: DOWN"
+    echo "Reason: Connection failed or timed out"
+    exit 1
+fi
+
+echo "HTTP Status: $HTTP_STATUS"
+
+if [[ "$HTTP_STATUS" =~ ^[0-9]{3}$ ]] &&
+   (( 10#$HTTP_STATUS >= 200 && 10#$HTTP_STATUS < 400 )); then
+    echo "Status: UP"
+    exit 0
+else
+    echo "Status: DOWN"
+    echo "Reason: Unexpected HTTP status code"
+    exit 1
+fi

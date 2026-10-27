@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# System Health Monitoring Script
+
+LOG_FILE="${LOG_FILE:-logs/system_health.log}"
+
+CPU_THRESHOLD="${CPU_THRESHOLD:-80}"
+MEMORY_THRESHOLD="${MEMORY_THRESHOLD:-80}"
+DISK_THRESHOLD="${DISK_THRESHOLD:-80}"
+PROCESS_THRESHOLD="${PROCESS_THRESHOLD:-500}"
+
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Send output to both terminal and log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "=================================="
+echo "       SYSTEM HEALTH REPORT"
+echo "=================================="
+echo "Date: $(date)"
+echo
+
+# Check CPU usage using /proc/stat
+read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+CPU_IDLE_1=$((idle + iowait))
+CPU_TOTAL_1=$((user + nice + system + idle + iowait + irq + softirq + steal))
+
+sleep 1
+
+read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+CPU_IDLE_2=$((idle + iowait))
+CPU_TOTAL_2=$((user + nice + system + idle + iowait + irq + softirq + steal))
+
+TOTAL_DIFF=$((CPU_TOTAL_2 - CPU_TOTAL_1))
+IDLE_DIFF=$((CPU_IDLE_2 - CPU_IDLE_1))
+
+if (( TOTAL_DIFF > 0 )); then
+    CPU_USAGE=$(( (TOTAL_DIFF - IDLE_DIFF) * 100 / TOTAL_DIFF ))
+else
+    CPU_USAGE=0
+fi
+
+echo "CPU Usage: ${CPU_USAGE}%"
+
+if (( CPU_USAGE > CPU_THRESHOLD )); then
+    echo "ALERT: CPU usage is above ${CPU_THRESHOLD}%"
+fi
+
+# Check memory usage
+MEMORY_USAGE=$(free | awk '/Mem:/ {printf "%.0f", $3/$2 * 100}')
+
+echo "Memory Usage: ${MEMORY_USAGE}%"
+
+if (( MEMORY_USAGE > MEMORY_THRESHOLD )); then
+    echo "ALERT: Memory usage is above ${MEMORY_THRESHOLD}%"
+fi
+
+# Check root disk usage
+DISK_USAGE=$(df / | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+
+echo "Disk Usage: ${DISK_USAGE}%"
+
+if (( DISK_USAGE > DISK_THRESHOLD )); then
+    echo "ALERT: Disk usage is above ${DISK_THRESHOLD}%"
+fi
+
+# Count running processes
+PROCESS_COUNT=$(ps -e --no-headers | wc -l)
+
+echo "Running Processes: ${PROCESS_COUNT}"
+
+if (( PROCESS_COUNT > PROCESS_THRESHOLD )); then
+    echo "ALERT: Process count is above ${PROCESS_THRESHOLD}"
+fi
+
+echo
+echo "Health check completed."
+echo "Log file: ${LOG_FILE}"
+echo "=================================="
